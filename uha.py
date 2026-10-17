@@ -552,6 +552,12 @@ def build_parser() -> argparse.ArgumentParser:
     ck.add_argument("--compare", nargs=2, metavar=("BEFORE", "AFTER"),
                     help="按 label 对比两个本地检查点的变换（旧任务 ID、新任务 ID）")
     ck.set_defaults(func=cmd_checkpoints)
+    rr = make("run-report", "从本地 JSONL 日志生成运行复盘报告")
+    rr.add_argument("log_file", help="logs/runs 下的 .jsonl 文件路径")
+    rr.add_argument("--html", default=None, metavar="PATH", help="写出独立 HTML 报告")
+    rr.add_argument("--task", default=None, help="仅展示指定 task/skill 的记录")
+    rr.add_argument("--method", default=None, help="仅展示指定通道，降级事件按目标通道筛选")
+    rr.set_defaults(func=cmd_run_report)
     cp = make("capabilities", "能力缓存/Provider 状态")
     cp.add_argument("--refresh", action="store_true")
     cp.set_defaults(func=cmd_capabilities)
@@ -754,6 +760,37 @@ def cmd_checkpoints(args: argparse.Namespace) -> int:
         for error in errors:
             print(f"{error['task_id']}  ERROR {error['error']}", file=sys.stderr)
     return 2 if errors else 0
+
+
+def cmd_run_report(args: argparse.Namespace) -> int:
+    from src.core.run_report import build_run_report, render_run_report
+
+    try:
+        source = Path(args.log_file)
+        if args.html and Path(args.html).resolve() == source.resolve():
+            raise ValueError("HTML 输出不能覆盖源日志")
+        report = build_run_report(source, task=args.task, method=args.method)
+        if args.html:
+            with Path(args.html).open("x", encoding="utf-8") as stream:
+                stream.write(render_run_report(report))
+        if args.json:
+            _print_json(report)
+        else:
+            summary = report["summary"]
+            print(f"运行复盘: {source}")
+            print(f"执行尝试={summary['attempts']} 降级={summary['fallbacks']} 日志问题={len(report['issues'])}")
+            print(f"执行结果: {summary['results']}")
+            print(f"验证结果: {summary['verification']}")
+            for row in report["methods"]:
+                print(f"  {row['method']}: 尝试={row['attempts']} 平均={row['mean_ms']}ms p95={row['p95_ms']}ms")
+            if args.html:
+                print(f"HTML: {Path(args.html).resolve()}")
+            for issue in report["issues"]:
+                print(f"  第 {issue['line']} 行: {issue['reason']}", file=sys.stderr)
+        return 2 if report["issues"] else 0
+    except (OSError, ValueError, RecursionError) as exc:
+        print(f"无法生成运行报告: {exc}", file=sys.stderr)
+        return 2
 
 
 def cmd_providers(args: argparse.Namespace) -> int:

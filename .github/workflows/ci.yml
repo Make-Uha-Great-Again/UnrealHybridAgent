@@ -89,6 +89,9 @@ jobs:
       - name: Offline checkpoint inspection and comparison
         run: python -m unittest discover -s tests -p "test_checkpoint*.py" -v
 
+      - name: Offline run reports
+        run: python -m unittest discover -s tests -p "test_run_report.py" -v
+
       - name: Report deferred validation
         if: always()
         run: |

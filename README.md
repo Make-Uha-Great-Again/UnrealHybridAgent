@@ -130,6 +130,34 @@ label 会拒绝对比；关卡信息缺失时会明确提示。此操作读取�
 `--compare` 不能与 `--task-id`、`--status` 同用；正常对比（包括有差异）返回 0，
 文件缺失、损坏或数据无效时返回 2。
 
+## 运行日志复盘报告
+
+`run-report` 从 `logs/runs/*.jsonl` 生成复盘报告，无需 UE 或外部服务：
+
+```powershell
+python uha.py run-report logs/runs/YOUR_RUN.jsonl
+python uha.py run-report logs/runs/YOUR_RUN.jsonl --html run-report.html
+python uha.py run-report logs/runs/YOUR_RUN.jsonl --json > run-report.json
+python uha.py run-report logs/runs/YOUR_RUN.jsonl --task actor_move --method UNREAL_MCP --html actor-move.html
+```
+
+将路径替换为实际日志文件。HTML 可直接在浏览器中打开，包含通道耗时统计、事件统计、
+执行时间线及日志问题列表，文件不依赖网络。输出文件必须尚不存在，避免覆盖已有报告。
+`--json` 可与 `--html` 同用；JSON 输出不会混入提示文字。
+
+执行结果与验证结果分别统计：`success` 只表示日志记录的执行成功；验证从逐项检查
+重新计算为 `passed` / `failed` / `skipped` / `unknown`，全部跳过不计通过。
+统计单位是**执行尝试**，一次任务可能因重试或降级产生多次尝试；不能把尝试成功数
+当成最终任务成功数。平均耗时和最近秩 p95 只使用有效的非负耗时，未知耗时不会记为零。
+
+按任务或通道精确筛选时，只汇总匹配的记录；降级事件按目标通道匹配，`fallback_skip`
+不算实际降级。时间线保留文件行序，不依赖系统时钟先后。损坏或未写完的 JSON 行会被
+跳过并标出原始行号，其余数据仍生成报告；有日志问题时退出码为 2，否则为 0。
+文件不存在或无法写出 HTML 时也返回 2。空日志或筛选无匹配会产生零记录报告。
+
+报告不导出工具参数、返回载荷、metadata 和完整错误消息，只保留用于复盘的选定字段；
+任务名、通道名等展示字段仍来自源日志，分享前请核对内容。
+
 ## v0.1 预发布
 
 本次提供 UHA 源码与测试，适合在自己的验证工程中体验场景自动化。发布副本已完成
