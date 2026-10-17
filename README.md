@@ -98,6 +98,23 @@ Copy-Item config/agent.config.example.json config/agent.config.json
 真实配置留在本地（`config/agent.config.json` 已被 gitignore）。公开场景语义配置
 使用 `example_palace` 名称，可作为项目配置的参考。
 
+## 本地检查点查看
+
+无需启动 UE 或连接外部服务，即可查看任务保存的检查点：
+
+```powershell
+python uha.py checkpoints
+python uha.py checkpoints --status rollback_failed
+python uha.py checkpoints --task-id task-20261017-120000-abcd1234
+python uha.py checkpoints --task-id task-20261017-120000-abcd1234 --json
+python uha.py checkpoints --json > checkpoints.json
+```
+
+将示例任务 ID 替换为列表中的实际 ID。详情展示保存时的 Actor 坐标、旋转、缩放和
+任务状态；这些是历史快照，不代表当前场景，也不会执行回滚。`--status` 仅用于列表，
+不能与 `--task-id` 同用。JSON 列表包含 `checkpoints` 和 `errors`；遇到损坏文件仍保留
+其余有效记录，并返回退出码 2。详情不存在或无法读取时也返回 2，正常查询返回 0。
+
 ## v0.1 预发布
 
 本次提供 UHA 源码与测试，适合在自己的验证工程中体验场景自动化。发布副本已完成

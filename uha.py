@@ -547,7 +547,9 @@ def build_parser() -> argparse.ArgumentParser:
     rb = make("rollback", "按 task-id 绝对坐标回滚 checkpoint")
     rb.add_argument("task_id")
     rb.set_defaults(func=cmd_rollback)
-    make("checkpoints", "列出 checkpoint").set_defaults(func=cmd_checkpoints)
+    ck = make("checkpoints", "列出或查看本地 checkpoint（无需连接 UE）")
+    ck.add_argument("--status", default=None, help="按状态精确筛选列表，例如 done / rollback_failed")
+    ck.set_defaults(func=cmd_checkpoints)
     cp = make("capabilities", "能力缓存/Provider 状态")
     cp.add_argument("--refresh", action="store_true")
     cp.set_defaults(func=cmd_capabilities)
@@ -669,13 +671,60 @@ def cmd_checkpoints(args: argparse.Namespace) -> int:
     from src.core.checkpoint import CheckpointStore
 
     store = CheckpointStore(cfg.path("workspace.state_dir") / "checkpoints")
+    if args.task_id and args.status:
+        print("--task-id 与 --status 不能同时使用", file=sys.stderr)
+        return 2
+    if args.task_id:
+        try:
+            data = store.load(args.task_id)
+            if not isinstance(data, dict):
+                raise ValueError("checkpoint 必须是 JSON 对象")
+            actors = data.get("actors") or []
+            if not isinstance(actors, list) or any(not isinstance(a, dict) for a in actors):
+                raise ValueError("checkpoint actors 必须是对象列表")
+        except (OSError, ValueError) as exc:
+            print(f"无法读取 checkpoint: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            _print_json(data)
+        else:
+            print(f"任务: {data.get('task_id', args.task_id)}")
+            print(f"状态: {data.get('status')}  模式: {data.get('execution_mode')}")
+            print(f"关卡: {data.get('level')}  创建时间: {data.get('created_at_iso')}")
+            print("以下为保存时的快照，不代表当前 UE 场景状态。")
+            for actor in data.get("actors") or []:
+                print(f"  {actor.get('label')}  location={actor.get('location')} "
+                      f"rotation={actor.get('rotation')} scale={actor.get('scale')}")
+            for note in data.get("notes") or []:
+                print(f"备注: {note}")
+        return 0
+
+    checkpoints = []
+    errors = []
     for tid in store.list_ids():
         try:
             data = store.load(tid)
-            print(f"{tid}  status={data.get('status')} actors={len(data.get('actors') or [])} mode={data.get('execution_mode')}")
-        except Exception as exc:
-            print(f"{tid}  ERROR {exc}")
-    return 0
+            if not isinstance(data, dict):
+                raise ValueError("checkpoint 必须是 JSON 对象")
+            if args.status and data.get("status") != args.status:
+                continue
+            actors = data.get("actors") or []
+            if not isinstance(actors, list) or any(not isinstance(a, dict) for a in actors):
+                raise ValueError("checkpoint actors 必须是对象列表")
+            row = {"task_id": tid, "status": data.get("status"),
+                   "actor_count": len(actors),
+                   "execution_mode": data.get("execution_mode"), "level": data.get("level")}
+            checkpoints.append(row)
+        except (OSError, ValueError, TypeError) as exc:
+            errors.append({"task_id": tid, "error": str(exc)})
+    if args.json:
+        _print_json({"checkpoints": checkpoints, "errors": errors})
+    else:
+        for row in checkpoints:
+            print(f"{row['task_id']}  status={row['status']} actors={row['actor_count']} mode={row['execution_mode']}")
+        for error in errors:
+            print(f"{error['task_id']}  ERROR {error['error']}", file=sys.stderr)
+    return 2 if errors else 0
 
 
 def cmd_providers(args: argparse.Namespace) -> int:
