@@ -52,7 +52,9 @@ class CapabilityCache:
     ) -> CapabilitySnapshot:
         with self._lock:
             now = time.time()
-            if not force and self._snap is not None:
+            # Keep probe errors for diagnostics, but retry on the next request
+            # so a transient failure cannot hide recovery for the entire TTL.
+            if not force and self._snap is not None and self._snap.source != "probe_error":
                 age = now - self._snap.created_at
                 fp_ok = (
                     fingerprint is None

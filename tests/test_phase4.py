@@ -108,6 +108,30 @@ def test_capability_cache_hit_and_invalidate() -> None:
     assert cache.stats()["hits"] >= 1
 
 
+def test_capability_cache_recovers_after_probe_error() -> None:
+    cache = CapabilityCache(ttl_s=30)
+    calls = 0
+
+    def probe():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise ConnectionError("temporary outage")
+        return {"UNREAL_MCP": True}
+
+    failed = cache.get(probe)
+    assert failed.source == "probe_error"
+    assert failed.errors == {"_probe": "ConnectionError: temporary outage"}
+    assert cache.peek() is failed  # Keep the failure available for diagnostics.
+    recovered = cache.get(probe)
+    assert recovered.ready == {"UNREAL_MCP": True}
+    assert cache.get(probe) is recovered  # Successful probes still use the TTL.
+    assert calls == 2
+    assert cache.stats()["misses"] == 2
+    assert cache.stats()["hits"] == 1
+    assert cache.stats()["invalidations"] == 1
+
+
 def test_semantic_inspect_no_auto_modify() -> None:
     class FakeBackend:
         def get_actor_transform(self, label):
