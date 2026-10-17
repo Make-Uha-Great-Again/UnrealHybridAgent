@@ -92,6 +92,32 @@ class CheckpointCliTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(json.loads(out), {"checkpoints": [], "errors": []})
 
+    def test_compare_json_and_human_report(self):
+        self.write("task-b", {**self.data, "task_id": "task-b", "actors": [
+            {"label": "柱子", "location": [1, 2, 13], "rotation": [0, 0, 0], "scale": [1, 1, 1]}]})
+        code, out, err = self.run_cli("--compare", "task-a", "task-b", "--json")
+        self.assertEqual((code, err), (0, ""))
+        report = json.loads(out)
+        self.assertEqual(report["summary"]["changed"], 1)
+        self.assertEqual(report["changed"][0]["fields"]["location"]["delta"], [0, 0, 10])
+        code, out, _ = self.run_cli("--compare", "task-a", "task-b")
+        self.assertEqual(code, 0)
+        self.assertIn("位移差 (cm): [0, 0, 10]", out)
+        self.assertIn("变换变化=1", out)
+
+    def test_compare_missing_invalid_and_conflicting_inputs(self):
+        self.write("invalid", {"actors": [{"label": "bad", "location": [0]}]})
+        for args in [
+            ("--compare", "missing", "task-b"), ("--compare", "invalid", "task-b"),
+            ("--compare", "task-a", "task-b", "--task-id", "task-a"),
+            ("--compare", "task-a", "task-b", "--status", "done"),
+        ]:
+            with self.subTest(args=args):
+                code, out, err = self.run_cli(*args)
+                self.assertEqual(code, 2)
+                self.assertEqual(out, "")
+                self.assertTrue(err)
+
 
 if __name__ == "__main__":
     unittest.main()

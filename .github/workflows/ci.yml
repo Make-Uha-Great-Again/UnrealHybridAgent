@@ -86,8 +86,8 @@ jobs:
       - name: Release scope gates (deferred presentation layers must stay off)
         run: python -m unittest discover -s tests -p "test_release_scope.py" -v
 
-      - name: Offline checkpoint CLI
-        run: python -m unittest discover -s tests -p "test_checkpoint_cli.py" -v
+      - name: Offline checkpoint inspection and comparison
+        run: python -m unittest discover -s tests -p "test_checkpoint*.py" -v
 
       - name: Report deferred validation
         if: always()

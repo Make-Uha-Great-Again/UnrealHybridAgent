@@ -115,6 +115,21 @@ python uha.py checkpoints --json > checkpoints.json
 不能与 `--task-id` 同用。JSON 列表包含 `checkpoints` 和 `errors`；遇到损坏文件仍保留
 其余有效记录，并返回退出码 2。详情不存在或无法读取时也返回 2，正常查询返回 0。
 
+对比两份检查点，可查看 Actor 变换变化及位移差（厘米）：
+
+```powershell
+python uha.py checkpoints --compare OLD_TASK_ID NEW_TASK_ID
+python uha.py checkpoints --compare OLD_TASK_ID NEW_TASK_ID --json > checkpoint-diff.json
+```
+
+将两个 ID 替换为实际任务 ID，顺序为旧快照、新快照。对比按 label 匹配，分别列出
+记录新增、记录缺失、变换变化和无变化；仅比较 location、rotation、scale 的原始数值，
+不使用容差或旋转角度归一化。缺失的旋转/缩放保留为 null，不推断为默认值。
+记录新增/缺失不等于场景创建/删除，Actor 改名也无法自动关联。不同已知关卡或重复
+label 会拒绝对比；关卡信息缺失时会明确提示。此操作读取历史文件，结果不代表当前场景。
+`--compare` 不能与 `--task-id`、`--status` 同用；正常对比（包括有差异）返回 0，
+文件缺失、损坏或数据无效时返回 2。
+
 ## v0.1 预发布
 
 本次提供 UHA 源码与测试，适合在自己的验证工程中体验场景自动化。发布副本已完成

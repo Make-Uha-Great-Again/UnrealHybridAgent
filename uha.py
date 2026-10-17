@@ -549,6 +549,8 @@ def build_parser() -> argparse.ArgumentParser:
     rb.set_defaults(func=cmd_rollback)
     ck = make("checkpoints", "列出或查看本地 checkpoint（无需连接 UE）")
     ck.add_argument("--status", default=None, help="按状态精确筛选列表，例如 done / rollback_failed")
+    ck.add_argument("--compare", nargs=2, metavar=("BEFORE", "AFTER"),
+                    help="按 label 对比两个本地检查点的变换（旧任务 ID、新任务 ID）")
     ck.set_defaults(func=cmd_checkpoints)
     cp = make("capabilities", "能力缓存/Provider 状态")
     cp.add_argument("--refresh", action="store_true")
@@ -671,9 +673,36 @@ def cmd_checkpoints(args: argparse.Namespace) -> int:
     from src.core.checkpoint import CheckpointStore
 
     store = CheckpointStore(cfg.path("workspace.state_dir") / "checkpoints")
-    if args.task_id and args.status:
-        print("--task-id 与 --status 不能同时使用", file=sys.stderr)
+    if sum(bool(v) for v in (args.task_id, args.status, args.compare)) > 1:
+        print("--task-id、--status 与 --compare 不能同时使用", file=sys.stderr)
         return 2
+    if args.compare:
+        from src.core.checkpoint_diff import compare_checkpoints
+
+        try:
+            report = compare_checkpoints(*(store.load(tid) for tid in args.compare))
+        except (OSError, ValueError, OverflowError) as exc:
+            print(f"无法对比 checkpoint: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            _print_json(report)
+        else:
+            print(f"检查点对比: {args.compare[0]} → {args.compare[1]}")
+            summary = report["summary"]
+            print(f"记录新增={summary['added']} 记录缺失={summary['removed']} "
+                  f"变换变化={summary['changed']} 无变化={summary['unchanged']}")
+            for warning in report["warnings"]:
+                print(f"提示: {warning}")
+            for kind, title in (("added", "记录新增"), ("removed", "记录缺失")):
+                for actor in report[kind]:
+                    print(f"  {title}: {actor['label']}")
+            for actor in report["changed"]:
+                print(f"  变化: {actor['label']}")
+                for field, change in actor["fields"].items():
+                    print(f"    {field}: {change['before']} → {change['after']}")
+                    if "delta" in change:
+                        print(f"    位移差 (cm): {change['delta']}")
+        return 0
     if args.task_id:
         try:
             data = store.load(args.task_id)
